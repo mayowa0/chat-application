@@ -12,14 +12,12 @@ from dotenv import load_dotenv
 # Load .env if present
 load_dotenv()
 
-# Flask app setup
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-change-me')
 
 # Ensure instance folder for DB/sessions exists
 os.makedirs(app.instance_path, exist_ok=True)
 
-# Use PostgreSQL for everything
 POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
 POSTGRES_PW = os.getenv("POSTGRES_PW", "yourpassword")
 POSTGRES_DB = os.getenv("POSTGRES_DB", "chat_app")
@@ -31,45 +29,37 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Initialize SQLAlchemy after all configs are set
 db = SQLAlchemy(app)
 
-# Server-side sessions so OTP isn't stored in client cookies
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_FILE_DIR'] = os.path.join(app.instance_path, 'flask_session')
 os.makedirs(app.config['SESSION_FILE_DIR'], exist_ok=True)
 Session(app)
 
-# Initialize SocketIO (allow all origins in dev)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# ----------------- MODELS -----------------
-# Chat app users (with username)
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(120), unique=True, nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
 
-# API users (signup/login stored in users.db)
 class UserAuth(db.Model):
   #  __bind_key__ = 'auth'
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(100), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
 
-# ----------------- HELPERS -----------------
 def generate_otp(length=6):
     """Generate a numeric OTP of given length."""
     digits = string.digits
     otp = ''.join(random.choice(digits) for _ in range(length))
     return otp
 
-# ----------------- ROUTES -----------------
 @app.route('/')
 def index():
     if 'email' in session:
         return redirect(url_for('user_list'))
     return render_template('index.html')
 
-# ---------- SIGNUP ----------
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     if request.method == 'POST':
@@ -83,7 +73,7 @@ def signup():
         if User.query.filter_by(email=email).first():
             return render_template('signup.html', error="Email already exists")
 
-        # Generate and send OTP
+
         otp = generate_otp()
         try:
             send_otp_to_email(email, otp)
@@ -91,7 +81,6 @@ def signup():
             print("Email sending error:", e)
             return render_template('verify_otp.html', error="Couldn't send email. In dev, check server logs for the OTP.")
 
-        # Store user data temporarily in session until OTP is verified
         session['temp_username'] = username
         session['temp_email'] = email
         session['temp_password'] = generate_password_hash(password)
@@ -101,7 +90,6 @@ def signup():
 
     return render_template('signup.html')
 
-# ---------- OTP VERIFICATION ----------
 @app.route('/verify_otp', methods=['GET', 'POST'])
 def verify_otp():
     if request.method == 'POST':
@@ -133,7 +121,6 @@ def verify_otp():
 
     return render_template('verify_otp.html')
 
-# ---------- LOGIN ----------
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -150,13 +137,11 @@ def login():
 
     return render_template('login.html')
 
-# ---------- LOGOUT ----------
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('index'))
 
-# ---------- USERS LIST ----------
 @app.route('/chat')
 def user_list():
     if 'email' not in session:
@@ -208,7 +193,6 @@ def handle_message(data):
         sender = session.get('username', session.get('email', 'Someone'))
         send({'sender': sender, 'message': msg}, to=room)
 
-# ----------------- API ROUTES (for Postman) -----------------
 @app.route('/api/signup', methods=['POST'])
 def api_signup():
     data = request.get_json(silent=True) or {}
@@ -240,9 +224,8 @@ def api_login():
 
     return jsonify({"message": "Invalid email or password"}), 401
 
-# ----------------- STARTUP -----------------
 with app.app_context():
-    db.create_all()               # creates tables in chat.db (default)
+    db.create_all()             
 
 if __name__ == '__main__':
     socketio.run(app, debug=True, allow_unsafe_werkzeug=True)
